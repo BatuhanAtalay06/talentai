@@ -1,7 +1,9 @@
 import os
 import tempfile
+import psycopg2
 import streamlit as st
 from dotenv import load_dotenv
+from google.genai import errors as genai_errors
 
 load_dotenv()
 
@@ -14,10 +16,31 @@ from parser import (
 )
 from db import init_db, save_job_posting, save_candidate, list_candidates, list_job_postings
 
-init_db()
+
+def friendly_error(exc: Exception) -> str:
+    if isinstance(exc, genai_errors.APIError):
+        if exc.code == 429:
+            return "Gemini API kullanım limitine ulaşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin."
+        if exc.code == 404:
+            return "Gemini modeli bulunamadı. Model adı değişmiş veya kaldırılmış olabilir."
+        if exc.code and exc.code >= 500:
+            return "Gemini servisinde geçici bir sorun oluştu. Lütfen birkaç saniye sonra tekrar deneyin."
+        return f"Gemini isteği başarısız oldu: {exc.message or exc}"
+    if isinstance(exc, psycopg2.OperationalError):
+        return "Veritabanına bağlanılamadı. Postgres'in çalıştığından emin olun (örn. 'docker compose ps')."
+    if isinstance(exc, psycopg2.Error):
+        return "Veritabanı işlemi sırasında bir hata oluştu."
+    return f"Beklenmeyen bir hata oluştu: {exc}"
+
 
 st.set_page_config(page_title="TalentAI", page_icon="🎯", layout="wide")
 st.title("TalentAI — CV Analiz & Eşleştirme")
+
+try:
+    init_db()
+except Exception as e:
+    st.error(f"Uygulama başlatılamadı — {friendly_error(e)}")
+    st.stop()
 
 tab_eslestirme, tab_kisiler, tab_ilanlar = st.tabs(["Eşleştirme", "Kayıtlı Kişiler", "İş İlanları"])
 
@@ -34,12 +57,15 @@ with tab_eslestirme:
             if not job_description.strip() and not requirements.strip():
                 st.warning("Lütfen en az iş tanımı veya aranan nitelikler girin.")
             else:
-                with st.spinner("Vektör hesaplanıyor..."):
-                    job_text = "\n\n".join(filter(None, [position, job_description, requirements]))
-                    job_vector = get_embedding(job_text)
-                    save_job_posting(position or "İsimsiz Pozisyon", job_description, requirements, job_vector)
-                    st.session_state["job_vector"] = job_vector
-                st.success("İlan vektörü hesaplandı ve veritabanına kaydedildi.")
+                try:
+                    with st.spinner("Vektör hesaplanıyor..."):
+                        job_text = "\n\n".join(filter(None, [position, job_description, requirements]))
+                        job_vector = get_embedding(job_text)
+                        save_job_posting(position or "İsimsiz Pozisyon", job_description, requirements, job_vector)
+                        st.session_state["job_vector"] = job_vector
+                    st.success("İlan vektörü hesaplandı ve veritabanına kaydedildi.")
+                except Exception as e:
+                    st.error(friendly_error(e))
 
     with col2:
         st.subheader("CV Yükleme & Analiz")
@@ -60,24 +86,32 @@ with tab_eslestirme:
                         tmp.write(uploaded_file.read())
                         tmp_path = tmp.name
 
-                    with st.spinner(f"{uploaded_file.name}: metin çıkarılıyor..."):
-                        if ext == ".pdf":
-                            cv_text = extract_text_from_pdf(tmp_path)
-                        else:
-                            cv_text = extract_text_from_docx(tmp_path)
-
-                    os.unlink(tmp_path)
+                    try:
+                        with st.spinner(f"{uploaded_file.name}: metin çıkarılıyor..."):
+                            if ext == ".pdf":
+                                cv_text = extract_text_from_pdf(tmp_path)
+                            else:
+                                cv_text = extract_text_from_docx(tmp_path)
+                    except Exception as e:
+                        st.error(f"{uploaded_file.name}: metin çıkarılamadı — {friendly_error(e)}")
+                        continue
+                    finally:
+                        os.unlink(tmp_path)
 
                     if not cv_text.strip():
                         st.error(f"{uploaded_file.name}: CV'den metin çıkarılamadı.")
                         continue
 
-                    with st.spinner(f"{uploaded_file.name}: Gemini ile analiz ediliyor..."):
-                        cv_data = parse_cv_with_gemini(cv_text)
+                    try:
+                        with st.spinner(f"{uploaded_file.name}: Gemini ile analiz ediliyor..."):
+                            cv_data = parse_cv_with_gemini(cv_text)
 
-                    with st.spinner(f"{uploaded_file.name}: vektörleştiriliyor..."):
-                        cv_vector = get_embedding(cv_text)
-                        save_candidate(uploaded_file.name, cv_data, cv_text, cv_vector)
+                        with st.spinner(f"{uploaded_file.name}: vektörleştiriliyor..."):
+                            cv_vector = get_embedding(cv_text)
+                            save_candidate(uploaded_file.name, cv_data, cv_text, cv_vector)
+                    except Exception as e:
+                        st.error(f"{uploaded_file.name}: {friendly_error(e)}")
+                        continue
 
                     score = calculate_cosine_similarity(st.session_state["job_vector"], cv_vector)
                     results.append((uploaded_file.name, score, cv_data))
@@ -104,7 +138,11 @@ with tab_eslestirme:
 
 with tab_kisiler:
     st.subheader("Kayıtlı Kişiler")
-    candidates = list_candidates()
+    try:
+        candidates = list_candidates()
+    except Exception as e:
+        st.error(friendly_error(e))
+        candidates = []
 
     if not candidates:
         st.info("Henüz kayıtlı kişi yok. 'Eşleştirme' sekmesinden CV yükleyip analiz ettiğinizde burada listelenecek.")
@@ -133,7 +171,11 @@ with tab_kisiler:
 
 with tab_ilanlar:
     st.subheader("İş İlanları")
-    job_postings = list_job_postings()
+    try:
+        job_postings = list_job_postings()
+    except Exception as e:
+        st.error(friendly_error(e))
+        job_postings = []
 
     if not job_postings:
         st.info("Henüz kayıtlı iş ilanı yok. 'Eşleştirme' sekmesinden ilan girip 'İlan Vektörünü Hesapla' butonuna bastığınızda burada listelenecek.")
