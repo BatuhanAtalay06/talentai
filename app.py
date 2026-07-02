@@ -12,14 +12,14 @@ from parser import (
     get_embedding,
     calculate_cosine_similarity,
 )
-from db import init_db, save_job_posting, save_candidate, list_candidates
+from db import init_db, save_job_posting, save_candidate, list_candidates, list_job_postings
 
 init_db()
 
 st.set_page_config(page_title="TalentAI", page_icon="🎯", layout="wide")
 st.title("TalentAI — CV Analiz & Eşleştirme")
 
-tab_eslestirme, tab_kisiler = st.tabs(["Eşleştirme", "Kayıtlı Kişiler"])
+tab_eslestirme, tab_kisiler, tab_ilanlar = st.tabs(["Eşleştirme", "Kayıtlı Kişiler", "İş İlanları"])
 
 with tab_eslestirme:
     col1, col2 = st.columns(2)
@@ -130,3 +130,22 @@ with tab_kisiler:
                 st.markdown(f"**{c['ad_soyad'] or c['file_name']}**")
                 st.write(c["ozet"] or "_Özet yok._")
                 st.divider()
+
+with tab_ilanlar:
+    st.subheader("İş İlanları")
+    job_postings = list_job_postings()
+
+    if not job_postings:
+        st.info("Henüz kayıtlı iş ilanı yok. 'Eşleştirme' sekmesinden ilan girip 'İlan Vektörünü Hesapla' butonuna bastığınızda burada listelenecek.")
+    else:
+        st.caption(f"Toplam {len(job_postings)} ilan")
+        table_rows = [
+            {
+                "Pozisyon": j["position"],
+                "İş Tanımı": j["description"] or "-",
+                "Aranan Nitelikler": j["requirements"] or "-",
+                "Kayıt Tarihi": j["created_at"].strftime("%Y-%m-%d %H:%M"),
+            }
+            for j in job_postings
+        ]
+        st.dataframe(table_rows, use_container_width=True, hide_index=True)

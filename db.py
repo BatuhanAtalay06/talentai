@@ -115,6 +115,29 @@ def delete_job_posting(row_id: int, dsn: str = DATABASE_URL) -> None:
         conn.close()
 
 
+def list_job_postings(dsn: str = DATABASE_URL) -> list[dict]:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, position, description, requirements, created_at "
+                "FROM job_postings ORDER BY created_at DESC"
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": row[0],
+                "position": row[1],
+                "description": row[2],
+                "requirements": row[3],
+                "created_at": row[4],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
 def save_candidate(
     file_name: str,
     cv_data: dict,
