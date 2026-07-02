@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16
+    container_name: talentai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-batuhan}
+    ports:
+      - "5432:5432"
+    volumes:
+      - talentai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: talentai-app
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-batuhan}@db:5432/postgres
+    ports:
+      - "8501:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  talentai_pgdata:

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.streamlit/secrets.toml
+*.docx
+test_parser.py
+README.md
