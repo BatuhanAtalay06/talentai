@@ -100,12 +100,39 @@ class TestEndToEndMatchingMocked:
 
 
 class TestDb:
-    def test_save_and_get_embedding_roundtrip(self):
+    def test_save_and_get_job_posting_roundtrip(self):
         db_module.init_db()
 
-        row_id = db_module.save_embedding("cv", "test_cv_1_ahmet.docx", "ornek metin", [0.1, 0.2, 0.3])
+        row_id = db_module.save_job_posting(
+            "Senior Python Developer", "Backend gelistirme", "5+ yil Python", [0.1, 0.2, 0.3]
+        )
         try:
-            vector = db_module.get_embedding(row_id)
-            assert vector == pytest.approx([0.1, 0.2, 0.3])
+            job = db_module.get_job_posting(row_id)
+            assert job["position"] == "Senior Python Developer"
+            assert job["vector"] == pytest.approx([0.1, 0.2, 0.3])
         finally:
-            db_module.delete_embedding(row_id)
+            db_module.delete_job_posting(row_id)
+
+    def test_save_and_get_candidate_roundtrip(self):
+        db_module.init_db()
+
+        cv_data = {
+            "ad_soyad": "Ahmet Yilmaz",
+            "iletisim": {"e_posta": "ahmet@example.com", "telefon": "5551112233"},
+            "deneyim_yili": 5,
+            "yetenekler": ["Python", "SQL"],
+            "egitim": ["Bilgisayar Muhendisligi"],
+            "ozet": "Deneyimli yazilim gelistirici.",
+        }
+
+        row_id = db_module.save_candidate(
+            "test_cv_1_ahmet.docx", cv_data, "ornek cv metni", [0.4, 0.5, 0.6]
+        )
+        try:
+            candidate = db_module.get_candidate(row_id)
+            assert candidate["ad_soyad"] == "Ahmet Yilmaz"
+            assert candidate["e_posta"] == "ahmet@example.com"
+            assert candidate["yetenekler"] == ["Python", "SQL"]
+            assert candidate["vector"] == pytest.approx([0.4, 0.5, 0.6])
+        finally:
+            db_module.delete_candidate(row_id)

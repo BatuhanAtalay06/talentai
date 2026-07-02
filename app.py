@@ -12,7 +12,7 @@ from parser import (
     get_embedding,
     calculate_cosine_similarity,
 )
-from db import init_db, save_embedding
+from db import init_db, save_job_posting, save_candidate
 
 init_db()
 
@@ -34,7 +34,7 @@ with col1:
             with st.spinner("Vektör hesaplanıyor..."):
                 job_text = "\n\n".join(filter(None, [position, job_description, requirements]))
                 job_vector = get_embedding(job_text)
-                save_embedding("job", position or "İsimsiz Pozisyon", job_text, job_vector)
+                save_job_posting(position or "İsimsiz Pozisyon", job_description, requirements, job_vector)
                 st.session_state["job_vector"] = job_vector
             st.success("İlan vektörü hesaplandı ve veritabanına kaydedildi.")
 
@@ -74,7 +74,7 @@ with col2:
 
                 with st.spinner(f"{uploaded_file.name}: vektörleştiriliyor..."):
                     cv_vector = get_embedding(cv_text)
-                    save_embedding("cv", uploaded_file.name, cv_text, cv_vector)
+                    save_candidate(uploaded_file.name, cv_data, cv_text, cv_vector)
 
                 score = calculate_cosine_similarity(st.session_state["job_vector"], cv_vector)
                 results.append((uploaded_file.name, score, cv_data))
