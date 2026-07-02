@@ -26,6 +26,8 @@ from db import (
     get_job_posting,
     update_job_posting,
     delete_job_posting,
+    save_match,
+    list_matches,
 )
 
 
@@ -54,7 +56,9 @@ except Exception as e:
     st.error(f"Uygulama başlatılamadı — {friendly_error(e)}")
     st.stop()
 
-tab_eslestirme, tab_kisiler, tab_ilanlar = st.tabs(["Eşleştirme", "Kayıtlı Kişiler", "İş İlanları"])
+tab_eslestirme, tab_kisiler, tab_ilanlar, tab_gecmis = st.tabs(
+    ["Eşleştirme", "Kayıtlı Kişiler", "İş İlanları", "Eşleşme Geçmişi"]
+)
 
 with tab_eslestirme:
     col1, col2 = st.columns(2)
@@ -73,8 +77,10 @@ with tab_eslestirme:
                     with st.spinner("Vektör hesaplanıyor..."):
                         job_text = "\n\n".join(filter(None, [position, job_description, requirements]))
                         job_vector = get_embedding(job_text)
-                        save_job_posting(position or "İsimsiz Pozisyon", job_description, requirements, job_vector)
+                        job_posting_id = save_job_posting(position or "İsimsiz Pozisyon", job_description, requirements, job_vector)
                         st.session_state["job_vector"] = job_vector
+                        st.session_state["job_posting_id"] = job_posting_id
+                        st.session_state["job_position_name"] = position or "İsimsiz Pozisyon"
                     st.success("İlan vektörü hesaplandı ve veritabanına kaydedildi.")
                 except Exception as e:
                     st.error(friendly_error(e))
@@ -120,12 +126,23 @@ with tab_eslestirme:
 
                         with st.spinner(f"{uploaded_file.name}: vektörleştiriliyor..."):
                             cv_vector = get_embedding(cv_text)
-                            save_candidate(uploaded_file.name, cv_data, cv_text, cv_vector)
+                            candidate_id = save_candidate(uploaded_file.name, cv_data, cv_text, cv_vector)
                     except Exception as e:
                         st.error(f"{uploaded_file.name}: {friendly_error(e)}")
                         continue
 
                     score = calculate_cosine_similarity(st.session_state["job_vector"], cv_vector)
+                    try:
+                        save_match(
+                            st.session_state.get("job_posting_id"),
+                            candidate_id,
+                            st.session_state.get("job_position_name", "İsimsiz Pozisyon"),
+                            cv_data.get("ad_soyad") or uploaded_file.name,
+                            score,
+                        )
+                    except Exception as e:
+                        st.warning(f"{uploaded_file.name}: eşleşme geçmişine kaydedilemedi — {friendly_error(e)}")
+
                     results.append((uploaded_file.name, score, cv_data))
 
                 if results:
@@ -285,3 +302,35 @@ with tab_ilanlar:
                 st.rerun()
             except Exception as e:
                 st.error(friendly_error(e))
+
+with tab_gecmis:
+    st.subheader("Eşleşme Geçmişi")
+    try:
+        matches = list_matches()
+    except Exception as e:
+        st.error(friendly_error(e))
+        matches = []
+
+    if not matches:
+        st.info("Henüz eşleşme geçmişi yok. 'Eşleştirme' sekmesinde bir analiz çalıştırdığınızda burada listelenecek.")
+    else:
+        st.caption(f"Toplam {len(matches)} eşleşme")
+
+        def uyum_label(score):
+            if score >= 75:
+                return "Yüksek"
+            if score >= 50:
+                return "Orta"
+            return "Düşük"
+
+        table_rows = [
+            {
+                "Kişi": m["candidate_name"],
+                "İlan": m["job_position"],
+                "Skor (%)": round(float(m["score"]), 1),
+                "Uyum": uyum_label(float(m["score"])),
+                "Tarih": m["created_at"].strftime("%Y-%m-%d %H:%M"),
+            }
+            for m in matches
+        ]
+        st.dataframe(table_rows, use_container_width=True, hide_index=True)

@@ -51,6 +51,19 @@ def init_db(dsn: str = DATABASE_URL) -> None:
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS matches (
+                    id SERIAL PRIMARY KEY,
+                    job_posting_id INTEGER REFERENCES job_postings(id) ON DELETE SET NULL,
+                    candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+                    job_position TEXT NOT NULL,
+                    candidate_name TEXT NOT NULL,
+                    score NUMERIC NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL
+                )
+                """
+            )
         conn.commit()
     finally:
         conn.close()
@@ -294,6 +307,57 @@ def list_candidates(dsn: str = DATABASE_URL) -> list[dict]:
                 "egitim": row[7],
                 "ozet": row[8],
                 "created_at": row[9],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+def save_match(
+    job_posting_id: int | None,
+    candidate_id: int | None,
+    job_position: str,
+    candidate_name: str,
+    score: float,
+    dsn: str = DATABASE_URL,
+) -> int:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO matches (job_posting_id, candidate_id, job_position, candidate_name, score, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (job_posting_id, candidate_id, job_position, candidate_name, score, datetime.now(timezone.utc)),
+            )
+            row_id = cur.fetchone()[0]
+        conn.commit()
+        return row_id
+    finally:
+        conn.close()
+
+
+def list_matches(dsn: str = DATABASE_URL) -> list[dict]:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, job_posting_id, candidate_id, job_position, candidate_name, score, created_at "
+                "FROM matches ORDER BY created_at DESC"
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": row[0],
+                "job_posting_id": row[1],
+                "candidate_id": row[2],
+                "job_position": row[3],
+                "candidate_name": row[4],
+                "score": row[5],
+                "created_at": row[6],
             }
             for row in rows
         ]
