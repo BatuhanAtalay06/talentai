@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
+*.db
+.pytest_cache/
+venv/
+~$*

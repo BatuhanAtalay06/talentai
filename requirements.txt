@@ -4,3 +4,5 @@ pypdf
 python-docx
 numpy
 python-dotenv
+psycopg2-binary
+pytest
