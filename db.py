@@ -195,3 +195,32 @@ def delete_candidate(row_id: int, dsn: str = DATABASE_URL) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def list_candidates(dsn: str = DATABASE_URL) -> list[dict]:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, file_name, ad_soyad, e_posta, telefon, deneyim_yili, "
+                "yetenekler, egitim, ozet, created_at "
+                "FROM candidates ORDER BY created_at DESC"
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": row[0],
+                "file_name": row[1],
+                "ad_soyad": row[2],
+                "e_posta": row[3],
+                "telefon": row[4],
+                "deneyim_yili": row[5],
+                "yetenekler": row[6],
+                "egitim": row[7],
+                "ozet": row[8],
+                "created_at": row[9],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
