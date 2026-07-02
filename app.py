@@ -14,7 +14,19 @@ from parser import (
     get_embedding,
     calculate_cosine_similarity,
 )
-from db import init_db, save_job_posting, save_candidate, list_candidates, list_job_postings
+from db import (
+    init_db,
+    save_job_posting,
+    save_candidate,
+    list_candidates,
+    list_job_postings,
+    get_candidate,
+    update_candidate,
+    delete_candidate,
+    get_job_posting,
+    update_job_posting,
+    delete_job_posting,
+)
 
 
 def friendly_error(exc: Exception) -> str:
@@ -138,6 +150,8 @@ with tab_eslestirme:
 
 with tab_kisiler:
     st.subheader("Kayıtlı Kişiler")
+    if "candidate_flash" in st.session_state:
+        st.success(st.session_state.pop("candidate_flash"))
     try:
         candidates = list_candidates()
     except Exception as e:
@@ -169,8 +183,56 @@ with tab_kisiler:
                 st.write(c["ozet"] or "_Özet yok._")
                 st.divider()
 
+        st.divider()
+        st.subheader("Kişi Yönet")
+        candidate_options = {f"{c['ad_soyad'] or c['file_name']} (#{c['id']})": c["id"] for c in candidates}
+        selected_candidate_label = st.selectbox(
+            "Düzenlenecek / silinecek kişi", list(candidate_options.keys()), key="candidate_select"
+        )
+        selected_candidate_id = candidate_options[selected_candidate_label]
+        candidate = get_candidate(selected_candidate_id)
+
+        with st.form("edit_candidate_form"):
+            ad_soyad_edit = st.text_input("Ad Soyad", value=candidate["ad_soyad"] or "")
+            e_posta_edit = st.text_input("E-posta", value=candidate["e_posta"] or "")
+            telefon_edit = st.text_input("Telefon", value=candidate["telefon"] or "")
+            deneyim_yili_edit = st.number_input(
+                "Deneyim (yıl)", value=float(candidate["deneyim_yili"] or 0), min_value=0.0, step=0.5
+            )
+            yetenekler_edit = st.text_area("Yetenekler (virgülle ayırın)", value=", ".join(candidate["yetenekler"] or []))
+            egitim_edit = st.text_area("Eğitim (virgülle ayırın)", value=", ".join(candidate["egitim"] or []))
+            ozet_edit = st.text_area("Özet", value=candidate["ozet"] or "")
+
+            if st.form_submit_button("Kaydet"):
+                try:
+                    update_candidate(
+                        selected_candidate_id,
+                        ad_soyad_edit,
+                        e_posta_edit,
+                        telefon_edit,
+                        deneyim_yili_edit,
+                        [s.strip() for s in yetenekler_edit.split(",") if s.strip()],
+                        [s.strip() for s in egitim_edit.split(",") if s.strip()],
+                        ozet_edit,
+                    )
+                    st.session_state["candidate_flash"] = "Kişi güncellendi."
+                    st.rerun()
+                except Exception as e:
+                    st.error(friendly_error(e))
+
+        confirm_delete_candidate = st.checkbox("Silmeyi onaylıyorum", key="confirm_delete_candidate")
+        if st.button("Kişiyi Sil", disabled=not confirm_delete_candidate):
+            try:
+                delete_candidate(selected_candidate_id)
+                st.session_state["candidate_flash"] = "Kişi silindi."
+                st.rerun()
+            except Exception as e:
+                st.error(friendly_error(e))
+
 with tab_ilanlar:
     st.subheader("İş İlanları")
+    if "job_flash" in st.session_state:
+        st.success(st.session_state.pop("job_flash"))
     try:
         job_postings = list_job_postings()
     except Exception as e:
@@ -191,3 +253,35 @@ with tab_ilanlar:
             for j in job_postings
         ]
         st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("İlan Yönet")
+        job_options = {f"{j['position']} (#{j['id']})": j["id"] for j in job_postings}
+        selected_job_label = st.selectbox("Düzenlenecek / silinecek ilan", list(job_options.keys()), key="job_select")
+        selected_job_id = job_options[selected_job_label]
+        job = get_job_posting(selected_job_id)
+
+        with st.form("edit_job_form"):
+            position_edit = st.text_input("Pozisyon Adı", value=job["position"])
+            description_edit = st.text_area("İş Tanımı", value=job["description"] or "", height=120)
+            requirements_edit = st.text_area("Aranan Nitelikler", value=job["requirements"] or "", height=120)
+
+            if st.form_submit_button("Kaydet (vektör yeniden hesaplanır)"):
+                try:
+                    with st.spinner("Vektör yeniden hesaplanıyor..."):
+                        job_text_edit = "\n\n".join(filter(None, [position_edit, description_edit, requirements_edit]))
+                        new_vector = get_embedding(job_text_edit)
+                        update_job_posting(selected_job_id, position_edit, description_edit, requirements_edit, new_vector)
+                    st.session_state["job_flash"] = "İlan güncellendi."
+                    st.rerun()
+                except Exception as e:
+                    st.error(friendly_error(e))
+
+        confirm_delete_job = st.checkbox("Silmeyi onaylıyorum", key="confirm_delete_job")
+        if st.button("İlanı Sil", disabled=not confirm_delete_job):
+            try:
+                delete_job_posting(selected_job_id)
+                st.session_state["job_flash"] = "İlan silindi."
+                st.rerun()
+            except Exception as e:
+                st.error(friendly_error(e))

@@ -115,6 +115,30 @@ def delete_job_posting(row_id: int, dsn: str = DATABASE_URL) -> None:
         conn.close()
 
 
+def update_job_posting(
+    row_id: int,
+    position: str,
+    description: str,
+    requirements: str,
+    vector: list[float],
+    dsn: str = DATABASE_URL,
+) -> None:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE job_postings
+                SET position = %s, description = %s, requirements = %s, vector = %s
+                WHERE id = %s
+                """,
+                (position, description, requirements, Json(vector), row_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def list_job_postings(dsn: str = DATABASE_URL) -> list[dict]:
     conn = _connect(dsn)
     try:
@@ -215,6 +239,34 @@ def delete_candidate(row_id: int, dsn: str = DATABASE_URL) -> None:
     try:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM candidates WHERE id = %s", (row_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_candidate(
+    row_id: int,
+    ad_soyad: str,
+    e_posta: str,
+    telefon: str,
+    deneyim_yili: float,
+    yetenekler: list[str],
+    egitim: list[str],
+    ozet: str,
+    dsn: str = DATABASE_URL,
+) -> None:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE candidates
+                SET ad_soyad = %s, e_posta = %s, telefon = %s, deneyim_yili = %s,
+                    yetenekler = %s, egitim = %s, ozet = %s
+                WHERE id = %s
+                """,
+                (ad_soyad, e_posta, telefon, deneyim_yili, Json(yetenekler), Json(egitim), ozet, row_id),
+            )
         conn.commit()
     finally:
         conn.close()
