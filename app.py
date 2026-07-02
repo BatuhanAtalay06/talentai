@@ -28,6 +28,7 @@ from db import (
     delete_job_posting,
     save_match,
     list_matches,
+    delete_match,
 )
 
 
@@ -305,6 +306,8 @@ with tab_ilanlar:
 
 with tab_gecmis:
     st.subheader("Eşleşme Geçmişi")
+    if "match_flash" in st.session_state:
+        st.success(st.session_state.pop("match_flash"))
     try:
         matches = list_matches()
     except Exception as e:
@@ -334,3 +337,21 @@ with tab_gecmis:
             for m in matches
         ]
         st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("Geçmiş Yönet")
+        match_options = {
+            f"{m['candidate_name']} → {m['job_position']} (%{round(float(m['score']), 1)}, #{m['id']})": m["id"]
+            for m in matches
+        }
+        selected_match_label = st.selectbox("Silinecek kayıt", list(match_options.keys()), key="match_select")
+        selected_match_id = match_options[selected_match_label]
+
+        confirm_delete_match = st.checkbox("Silmeyi onaylıyorum", key="confirm_delete_match")
+        if st.button("Kaydı Sil", disabled=not confirm_delete_match):
+            try:
+                delete_match(selected_match_id)
+                st.session_state["match_flash"] = "Kayıt silindi."
+                st.rerun()
+            except Exception as e:
+                st.error(friendly_error(e))

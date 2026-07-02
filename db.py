@@ -363,3 +363,13 @@ def list_matches(dsn: str = DATABASE_URL) -> list[dict]:
         ]
     finally:
         conn.close()
+
+
+def delete_match(row_id: int, dsn: str = DATABASE_URL) -> None:
+    conn = _connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM matches WHERE id = %s", (row_id,))
+        conn.commit()
+    finally:
+        conn.close()
